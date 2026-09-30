@@ -170,7 +170,10 @@
     background:#FAFAFB;
     cursor:pointer;
   }
-  .photo-slot input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+  .photo-slot input{display:none;}
+  .photo-slot .pick{display:flex;flex-direction:column;gap:8px;width:80%;}
+  .photo-slot .pick label{display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:8px;padding:10px 6px;font-size:13.5px;font-weight:600;color:var(--navy);cursor:pointer;}
+  .photo-slot .pick label:active{background:var(--gray-bg);}
   .photo-slot img{width:100%;height:100%;object-fit:cover;}
   .photo-slot .plus{font-size:26px;color:var(--muted);font-weight:300;}
   .photo-slot .remove{
@@ -383,10 +386,10 @@
     <div class="field">
       <label>Fotografías (máx. 2, opcionales)</label>
       <div class="photos-grid" id="photos-grid">
-        <div class="photo-slot" data-slot="0"><span class="plus">+</span><input type="file" accept="image/*" ></div>
-        <div class="photo-slot" data-slot="1"><span class="plus">+</span><input type="file" accept="image/*" ></div>
+        <div class="photo-slot" data-slot="0"></div>
+        <div class="photo-slot" data-slot="1"></div>
       </div>
-      <div class="hint">Toca un espacio para tomar la foto o elegirla de la galería.</div>
+      <div class="hint">Usa 📷 Cámara para tomar la foto en el momento, o 🖼 Galería para subir una que ya tengas.</div>
     </div>
 
     <div class="field">
@@ -628,22 +631,7 @@ function compressImage(file){
   });
 }
 
-document.querySelectorAll('.photo-slot').forEach(slot=>{
-  const idx = parseInt(slot.dataset.slot, 10);
-  const input = slot.querySelector('input');
-  input.addEventListener('change', async (e)=>{
-    const file = e.target.files[0];
-    if(!file) return;
-    showToast('Procesando foto...');
-    try{
-      const dataUrl = await compressImage(file);
-      currentPhotos[idx] = dataUrl;
-      renderPhotoSlot(slot, idx, dataUrl);
-    }catch(err){
-      showToast('No se pudo procesar la foto');
-    }
-  });
-});
+document.querySelectorAll('.photo-slot').forEach((slot, idx)=>resetPhotoSlot(slot, idx));
 
 function renderPhotoSlot(slot, idx, dataUrl){
   slot.innerHTML = `<img src="${dataUrl}" alt="Foto ${idx+1}"><button class="remove" data-idx="${idx}">✕</button>`;
@@ -654,18 +642,24 @@ function renderPhotoSlot(slot, idx, dataUrl){
   });
 }
 function resetPhotoSlot(slot, idx){
-  slot.innerHTML = `<span class="plus">+</span><input type="file" accept="image/*" >`;
-  slot.querySelector('input').addEventListener('change', async (e)=>{
-    const file = e.target.files[0];
-    if(!file) return;
-    showToast('Procesando foto...');
-    try{
-      const dataUrl = await compressImage(file);
-      currentPhotos[idx] = dataUrl;
-      renderPhotoSlot(slot, idx, dataUrl);
-    }catch(err){
-      showToast('No se pudo procesar la foto');
-    }
+  slot.innerHTML = `
+    <div class="pick">
+      <label>📷 Cámara<input type="file" accept="image/*" capture="environment"></label>
+      <label>🖼 Galería<input type="file" accept="image/*"></label>
+    </div>`;
+  slot.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      showToast('Procesando foto...');
+      try{
+        const dataUrl = await compressImage(file);
+        currentPhotos[idx] = dataUrl;
+        renderPhotoSlot(slot, idx, dataUrl);
+      }catch(err){
+        showToast('No se pudo procesar la foto');
+      }
+    });
   });
 }
 
