@@ -807,7 +807,33 @@ function buildTranscript(results){
     else if(last && ll.startsWith(tl)) continue;
     else segs.push(t);
   }
-  return segs.join(' ');
+  return collapseRepeats(segs.join(' '));
+}
+// Si el texto completo es la misma frase repetida (ej. "X X" o "X. X"), deja una sola vez
+function collapseRepeats(text){
+  const words = text.trim().split(/\s+/);
+  const n = words.length;
+  const key = w => norm(w);
+  for(let size = 1; size <= Math.floor(n/2); size++){
+    if(n % size !== 0) continue;
+    let ok = true;
+    for(let i = size; i < n && ok; i++){ if(key(words[i]) !== key(words[i % size])) ok = false; }
+    if(ok) return words.slice(0, size).join(' ');
+  }
+  // Quitar frases repetidas seguidas: "A B C A B C D" -> "A B C D"
+  const out = [];
+  for(let i = 0; i < words.length; ){
+    let skipped = false;
+    for(let size = Math.floor((words.length - i)/1); size >= 3; size--){
+      if(out.length >= size){
+        const prev = out.slice(out.length - size).map(key).join(' ');
+        const next = words.slice(i, i + size).map(key).join(' ');
+        if(words.length - i >= size && prev === next){ i += size; skipped = true; break; }
+      }
+    }
+    if(!skipped){ out.push(words[i]); i++; }
+  }
+  return out.join(' ');
 }
 // Separa la frase por palabras clave: "área ...", "departamento ...", "estado ...", "responsable ..."
 function splitByKeywords(transcript){
@@ -845,8 +871,12 @@ function applyVoice(transcript){
   clean = clean.charAt(0).toUpperCase() + clean.slice(1);
   if(!/[.!?]$/.test(clean)) clean += '.';
   if(sec.responsable) clean += ' Responsable: ' + sec.responsable.charAt(0).toUpperCase() + sec.responsable.slice(1) + '.';
+  clean = collapseRepeats(clean.replace(/\.$/, '')) + '.';
   const com = document.getElementById('f-comentario');
-  com.value = com.value.trim() ? com.value.trim() + ' ' + clean : clean;
+  const cur = com.value.trim();
+  // No volver a agregar un texto que ya está en el comentario
+  if(!cur) com.value = clean;
+  else if(!norm(cur).includes(norm(clean))) com.value = cur + ' ' + clean;
   out.push(`<span class="ok">✓ Comentario</span> agregado — revísalo antes de guardar`);
   document.getElementById('voice-result').innerHTML = out.join('<br>');
 }
@@ -879,8 +909,10 @@ function applyVoice(transcript){
       else if(ev.error === 'network') showToast('Se necesita internet para el dictado');
       else if(ev.error !== 'no-speech' && ev.error !== 'aborted') showToast('Error de micrófono: ' + ev.error);
     };
+    let applied = false;
     rec.onend = ()=>{
       stopUI();
+      if(applied) return; applied = true;
       const text = (finalText || live.textContent).trim();
       if(text){ applyVoice(text); live.textContent = '“' + text + '”'; }
     };
