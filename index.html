@@ -314,6 +314,8 @@
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
 </head>
 <body>
 
@@ -409,6 +411,7 @@
   </div>
   <div class="export-row">
     <button id="btn-export-excel">Exportar a Excel</button>
+    <button id="btn-export-word">Exportar a Word</button>
     <button id="btn-export-pdf">Exportar a PDF</button>
   </div>
 
@@ -488,7 +491,7 @@ async function sbRequest(method, path, body){
     },
     body: body ? JSON.stringify(body) : undefined
   });
-  if(!res.ok){ throw new Error('Supabase error ' + res.status); }
+  if(!res.ok){ let t=''; try{ t = await res.text(); }catch(_){} throw new Error('Supabase error ' + res.status + ' ' + t.slice(0,160)); }
   return res.json();
 }
 async function sbFetchAll(){
@@ -520,7 +523,11 @@ function setSyncStatus(state){
   if(!SYNC_ENABLED){ text.textContent = 'Guardado local (sin nube)'; return; }
   if(state === 'online'){ dot.classList.add('online'); text.textContent = 'Sincronizado en la nube'; }
   else if(state === 'syncing'){ dot.classList.remove('online'); text.textContent = 'Sincronizando...'; }
-  else { dot.classList.remove('online'); text.textContent = 'Guardado local (sin conexión)'; }
+  else {
+    dot.classList.remove('online');
+    const n = entries.filter(e=>e._pending).length;
+    text.textContent = 'Guardado local (sin conexión)' + (n ? ' · ' + n + ' por subir' : '') + ' · toca para reintentar';
+  }
 }
 
 const HOTEL_CODES = {"Dreams Flora Punta Cana":"DRFPC","Dreams Royal Beach Punta Cana":"DRRPC","Secrets Royal Beach Punta Cana":"SERPC","Dreams Onyx Punta Cana":"DROPC","Breathless Punta Cana":"BREPC","Secrets Baby Beach":"SEAUA","Hyatt Centric Santo Domingo":"SDQCT","JdV Royal Beach":"PUJJD","Dreams Jade":"DRJRC","Garden Inn by Hilton":"TBI"};
@@ -554,17 +561,29 @@ function cloudRowToEntry(row){
     createdAt: row.created_at, director: row.director || ''
   };
 }
+let lastSyncError = '';
 async function syncFromCloud(){
   if(!SYNC_ENABLED) return;
   setSyncStatus('syncing');
   try{
     const rows = await sbFetchAll();
+    const cloudIds = new Set(rows.map(r=>r.id));
+    // Evidencias guardadas sin conexión: se suben antes de refrescar, para no perderlas
+    const pending = entries.filter(e=>!e._demo && !cloudIds.has(e.id));
+    for(const e of pending){
+      await sbUpsert(e);
+      delete e._pending;
+      rows.push({id:e.id, hotel:e.hotel, area:e.area, depto:e.depto, comentario:e.comentario, status:e.status, photos:e.photos, created_at:e.createdAt, director:e.director});
+    }
+    if(pending.length) showToast(pending.length + ' evidencia(s) pendiente(s) subida(s) a la nube');
+    rows.sort((a,b)=> (b.created_at||'').localeCompare(a.created_at||''));
     entries = rows.map(cloudRowToEntry);
     saveEntries();
     populateLearnedOptions();
     renderEntries();
     setSyncStatus('online');
   }catch(e){
+    lastSyncError = String(e && e.message || e);
     setSyncStatus('offline');
   }
 }
@@ -680,7 +699,9 @@ document.getElementById('btn-save').addEventListener('click', ()=>{
 
   if(SYNC_ENABLED){
     setSyncStatus('syncing');
-    sbUpsert(entry).then(()=>setSyncStatus('online')).catch(()=>{
+    sbUpsert(entry).then(()=>setSyncStatus('online')).catch((err)=>{
+      lastSyncError = String(err && err.message || err);
+      entry._pending = true; saveEntries();
       setSyncStatus('offline');
       showToast('Guardado local. No se pudo sincronizar con la nube.');
     });
@@ -774,22 +795,57 @@ function detectStatus(text){
   if(/\bpendientes?\b/.test(text)) return 'Pendiente';
   return null;
 }
+// Android repite el texto acumulado en cada resultado; aquí se eliminan esas repeticiones.
+function buildTranscript(results){
+  const segs = [];
+  for(let i = 0; i < results.length; i++){
+    const t = results[i][0].transcript.trim();
+    if(!t) continue;
+    const last = segs[segs.length-1];
+    const tl = norm(t), ll = last ? norm(last) : '';
+    if(last && tl.startsWith(ll)) segs[segs.length-1] = t;
+    else if(last && ll.startsWith(tl)) continue;
+    else segs.push(t);
+  }
+  return segs.join(' ');
+}
+// Separa la frase por palabras clave: "área ...", "departamento ...", "estado ...", "responsable ..."
+function splitByKeywords(transcript){
+  const parts = transcript.split(/(?:^|\s)(departamento|estado|responsable|área|area)(?=[\s,.:;]|$)/i);
+  const out = {pre: parts[0] || '', area: '', departamento: '', estado: '', responsable: '', hasKeys: parts.length > 1};
+  for(let i = 1; i < parts.length; i += 2){
+    const k = norm(parts[i]);
+    const v = (parts[i+1] || '').replace(/^[\s,.:;]+|[\s,.:;]+$/g,'');
+    if(out[k] !== undefined) out[k] = (out[k] ? out[k] + ' ' : '') + v;
+  }
+  return out;
+}
 function applyVoice(transcript){
   const text = norm(transcript);
   if(!text) return;
   const out = [];
-  const area = findBestOption(text, optionValues('f-area'));
+  const sec = splitByKeywords(transcript);
+  const areaText = norm(sec.hasKeys ? (sec.area || sec.pre) : transcript);
+  const deptoText = norm(sec.departamento || transcript);
+  const estadoText = norm(sec.estado || transcript);
+
+  const area = findBestOption(areaText, optionValues('f-area'));
   if(area){ document.getElementById('f-area').value = area; document.getElementById('f-area').dispatchEvent(new Event('change')); }
   out.push(area ? `<span class="ok">✓ Área:</span> ${escapeHtml(area)}` : `<span class="no">✗ Área:</span> no detectada, selecciónala`);
-  const depto = findBestOption(text, optionValues('f-depto'), DEPTO_SYNONYMS);
+  const depto = findBestOption(deptoText, optionValues('f-depto'), DEPTO_SYNONYMS);
   if(depto){ document.getElementById('f-depto').value = depto; document.getElementById('f-depto').dispatchEvent(new Event('change')); }
   out.push(depto ? `<span class="ok">✓ Departamento:</span> ${escapeHtml(depto)}` : `<span class="no">✗ Departamento:</span> no detectado, selecciónalo`);
-  const st = detectStatus(text);
+  const st = detectStatus(estadoText);
   if(st){ const b = document.querySelector(`.status-btn[data-val="${st}"]`); if(b) b.click(); }
   out.push(st ? `<span class="ok">✓ Estado:</span> ${statusLabel(st)}` : `<span class="no">✗ Estado:</span> no detectado, selecciónalo`);
-  const com = document.getElementById('f-comentario');
-  let clean = transcript.trim(); clean = clean.charAt(0).toUpperCase() + clean.slice(1);
+
+  // Comentario: solo la descripción (sin las partes de departamento/estado ya capturadas)
+  let clean = sec.hasKeys ? [sec.pre, sec.area].filter(Boolean).join(' ').trim() : transcript.trim();
+  if(!clean) clean = transcript.trim();
+  clean = clean.charAt(0).toUpperCase() + clean.slice(1);
   if(!/[.!?]$/.test(clean)) clean += '.';
+  if(sec.responsable) clean += ' Responsable: ' + sec.responsable.charAt(0).toUpperCase() + sec.responsable.slice(1) + '.';
+  const com = document.getElementById('f-comentario');
   com.value = com.value.trim() ? com.value.trim() + ' ' + clean : clean;
   out.push(`<span class="ok">✓ Comentario</span> agregado — revísalo antes de guardar`);
   document.getElementById('voice-result').innerHTML = out.join('<br>');
@@ -815,12 +871,8 @@ function applyVoice(transcript){
     rec.lang = 'es-DO'; rec.continuous = true; rec.interimResults = true;
     finalText = ''; live.textContent = ''; document.getElementById('voice-result').innerHTML = '';
     rec.onresult = (ev)=>{
-      let interim = '';
-      for(let i = ev.resultIndex; i < ev.results.length; i++){
-        const t = ev.results[i][0].transcript;
-        if(ev.results[i].isFinal) finalText += t + ' '; else interim += t;
-      }
-      live.textContent = (finalText + interim).trim();
+      finalText = buildTranscript(ev.results);
+      live.textContent = finalText;
     };
     rec.onerror = (ev)=>{
       if(ev.error === 'not-allowed' || ev.error === 'service-not-allowed') showToast('Permite el uso del micrófono en el navegador');
@@ -1068,43 +1120,223 @@ function downloadCsv(filename, rows){
 }
 
 // ---- Export a Excel (.csv) ----
+function fmtDateFull(iso){
+  const d = new Date(iso);
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function exportCsvFallback(filtered, summary, hotels){
+  const rows = [];
+  rows.push(['LEVANTAMIENTO DE RECORRIDO — GRUPO MARTINÓN']);
+  rows.push(['Exportado', new Date().toLocaleString('es-DO')]);
+  rows.push(['Filtro', filterDescription()]);
+  rows.push([]);
+  rows.push(['Spirit Code','Hotel','Director General','Área','Departamento','Comentario','Estado','Fecha']);
+  filtered.forEach(e=>rows.push([hotelCode(e.hotel), e.hotel, e.director || directorFor(e.hotel), e.area, e.depto, e.comentario, statusLabel(e.status), fmtDateFull(e.createdAt)]));
+  downloadCsv('recorrido_evidencias_' + new Date().toISOString().slice(0,10) + '.csv', rows);
+}
 document.getElementById('btn-export-excel').addEventListener('click', ()=>{
   const filtered = getFiltered();
   if(filtered.length === 0){ showToast('No hay evidencias para los filtros seleccionados'); return; }
   const summary = computeSummary();
   const hotels = Object.keys(summary).sort((a,b)=>hotelLabel(a).localeCompare(hotelLabel(b)));
-  const rows = [];
+  if(typeof XLSX === 'undefined'){ exportCsvFallback(filtered, summary, hotels); showToast('Sin conexión: se descargó en formato .csv'); return; }
 
-  rows.push(['LEVANTAMIENTO DE RECORRIDO — GRUPO MARTINÓN']);
-  rows.push(['Exportado', new Date().toLocaleString('es-DO')]);
-  rows.push(['Filtro', filterDescription()]);
-  rows.push([]);
+  const NAVY='1F3864', GOLD='B08D3E', LINE='D9DDE3';
+  const border = {top:{style:'thin',color:{rgb:LINE}},bottom:{style:'thin',color:{rgb:LINE}},left:{style:'thin',color:{rgb:LINE}},right:{style:'thin',color:{rgb:LINE}}};
+  const sTitle = {font:{bold:true,sz:14,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:NAVY}},alignment:{vertical:'center'}};
+  const sSub = {font:{italic:true,sz:10,color:{rgb:'555555'}}};
+  const sHead = {font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:NAVY}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border};
+  const sCell = {alignment:{vertical:'top',wrapText:true},border,font:{sz:10}};
+  const sNum = {alignment:{horizontal:'center',vertical:'top'},border,font:{sz:10}};
+  const sTotal = {font:{bold:true,sz:10},fill:{fgColor:{rgb:'EEF0F3'}},alignment:{horizontal:'center'},border};
+  const statusFill = {Pendiente:'FBEAE9', Proceso:'FBF1DA', Resuelto:'E8F4EC'};
+  const statusFont = {Pendiente:'B3261E', Proceso:'8A6100', Resuelto:'1E6B3E'};
+  const sStatus = st => ({font:{bold:true,sz:10,color:{rgb:statusFont[st]||'000000'}},fill:{fgColor:{rgb:statusFill[st]||'FFFFFF'}},alignment:{horizontal:'center',vertical:'top'},border});
+  const c = (v,st) => ({v: v===undefined||v===null?'':v, t: typeof v==='number'?'n':'s', s: st});
 
-  rows.push(['DETALLE DE EVIDENCIAS']);
-  rows.push(['Spirit Code','Hotel','Director General','Área','Departamento','Comentario','Estado','Fecha']);
-  filtered.forEach(e=>{
-    rows.push([hotelCode(e.hotel), e.hotel, e.director || directorFor(e.hotel), e.area, e.depto, e.comentario, statusLabel(e.status), fmtDate(e.createdAt)]);
+  function buildSheet(title, headers, rows, widths, totalRow){
+    const ncol = headers.length;
+    const aoa = [];
+    const t = [c(title, sTitle)]; for(let k=1;k<ncol;k++) t.push(c('', sTitle)); aoa.push(t);
+    aoa.push([c('Exportado: ' + new Date().toLocaleString('es-DO') + '   ·   ' + filterDescription(), sSub)]);
+    aoa.push([]);
+    aoa.push(headers.map(h=>c(h, sHead)));
+    rows.forEach(r=>aoa.push(r));
+    if(totalRow) aoa.push(totalRow);
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:ncol-1}},{s:{r:1,c:0},e:{r:1,c:ncol-1}}];
+    ws['!cols'] = widths.map(w=>({wch:w}));
+    ws['!rows'] = [{hpt:26}];
+    ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:3,c:0},e:{r:3+rows.length,c:ncol-1}})};
+    ws['!freeze'] = {xSplit:0, ySplit:4};
+    return ws;
+  }
+
+  const detRows = filtered.map(e=>[
+    c(hotelCode(e.hotel), sNum), c(e.hotel, sCell), c(e.director || directorFor(e.hotel), sCell),
+    c(e.area, sCell), c(e.depto, sCell), c(e.comentario, sCell),
+    c(statusLabel(e.status), sStatus(e.status)), c(fmtDateFull(e.createdAt), sNum)
+  ]);
+  const wsDet = buildSheet('LEVANTAMIENTO DE RECORRIDO — DETALLE DE EVIDENCIAS',
+    ['Spirit Code','Hotel','Director General','Área','Departamento','Comentario','Estado','Fecha'],
+    detRows, [11,30,22,22,24,60,13,17]);
+
+  let tp=0,tr=0,ts=0;
+  const resRows = hotels.map(h=>{
+    const s = summary[h]; tp+=s.Pendiente; tr+=s.Proceso; ts+=s.Resuelto;
+    return [c(hotelCode(h), sNum), c(h, sCell), c(directorFor(h), sCell),
+      c(s.Pendiente, sNum), c(s.Proceso, sNum), c(s.Resuelto, sNum), c(s.Pendiente+s.Proceso+s.Resuelto, sNum)];
   });
-  rows.push([]);
+  const totalRow = [c('TOTAL', sTotal), c('', sTotal), c('', sTotal), c(tp, sTotal), c(tr, sTotal), c(ts, sTotal), c(tp+tr+ts, sTotal)];
+  const wsRes = buildSheet('LEVANTAMIENTO DE RECORRIDO — RESUMEN POR HOTEL',
+    ['Spirit Code','Hotel','Director General','Pendiente','En proceso','Resuelto','Total'],
+    resRows, [11,30,22,11,11,11,9], totalRow);
 
-  rows.push(['RESUMEN POR HOTEL']);
-  rows.push(['Spirit Code','Hotel','Director General','Pendiente','Proceso','Resuelto','Total']);
-  hotels.forEach(h=>{
-    const s = summary[h];
-    rows.push([hotelCode(h), h, directorFor(h), s.Pendiente, s.Proceso, s.Resuelto, s.Pendiente+s.Proceso+s.Resuelto]);
-  });
-  rows.push([]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsRes, 'Resumen');
+  XLSX.utils.book_append_sheet(wb, wsDet, 'Detalle');
+  XLSX.writeFile(wb, 'recorrido_evidencias_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  showToast('Archivo Excel descargado');
+});
 
-  rows.push(['RESPONSABLES POR HOTEL']);
-  rows.push(['Spirit Code','Hotel','Área','Departamento responsable','Estado']);
-  hotels.forEach(h=>{
-    summary[h].rows.forEach(r=>{
-      rows.push([hotelCode(h), h, r.area, r.depto, statusLabel(r.status)]);
+// ---- Export a Word (.docx) con fotos ----
+function dataUrlToBytes(dataUrl){
+  const b64 = dataUrl.split(',')[1] || '';
+  const bin = atob(b64); const out = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function imageInfo(bytes){
+  // PNG
+  if(bytes[0]===0x89 && bytes[1]===0x50){
+    const w=(bytes[16]<<24)|(bytes[17]<<16)|(bytes[18]<<8)|bytes[19];
+    const h=(bytes[20]<<24)|(bytes[21]<<16)|(bytes[22]<<8)|bytes[23];
+    return {type:'png', w, h};
+  }
+  // JPEG: buscar marcador SOF
+  let i = 2;
+  while(i < bytes.length){
+    if(bytes[i] !== 0xFF){ i++; continue; }
+    const m = bytes[i+1];
+    if(m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC){
+      return {type:'jpg', h:(bytes[i+5]<<8)|bytes[i+6], w:(bytes[i+7]<<8)|bytes[i+8]};
+    }
+    i += 2 + ((bytes[i+2]<<8)|bytes[i+3]);
+  }
+  return {type:'jpg', w:4, h:3};
+}
+document.getElementById('btn-export-word').addEventListener('click', async ()=>{
+  const filtered = getFiltered();
+  if(filtered.length === 0){ showToast('No hay evidencias para los filtros seleccionados'); return; }
+  if(typeof docx === 'undefined'){ showToast('Se necesita internet para generar el Word'); return; }
+  showToast('Generando documento Word...');
+  try{
+    const D = docx;
+    const NAVY='1F3864', GOLD='B08D3E', LINE='D9DDE3', FONT='Arial';
+    const bd = {style:D.BorderStyle.SINGLE, size:4, color:LINE};
+    const borders = {top:bd,bottom:bd,left:bd,right:bd};
+    const noBd = {style:D.BorderStyle.NONE, size:0, color:'FFFFFF'};
+    const noBorders = {top:noBd,bottom:noBd,left:noBd,right:noBd};
+    const CW = 9638; // ancho útil A4 con márgenes de 2 cm
+    const T = (text, o={}) => new D.TextRun({text: String(text==null?'':text), font:FONT, size:o.size||20, bold:!!o.bold, italics:!!o.italics, color:o.color});
+    const P = (runs, o={}) => new D.Paragraph({children: Array.isArray(runs)?runs:[runs], alignment:o.align, spacing:{before:o.before||0, after:o.after==null?60:o.after}, keepNext:!!o.keepNext});
+    const cell = (content, width, o={}) => new D.TableCell({
+      width:{size:width, type:D.WidthType.DXA}, borders:o.noBorders?noBorders:borders,
+      shading:o.fill?{fill:o.fill, type:D.ShadingType.CLEAR, color:'auto'}:undefined,
+      margins:{top:70,bottom:70,left:110,right:110}, verticalAlign:o.vAlign||D.VerticalAlign.TOP,
+      children: Array.isArray(content)?content:[content]
     });
-  });
+    const statusFill = {Pendiente:'FBEAE9', Proceso:'FBF1DA', Resuelto:'E8F4EC'};
+    const statusColor = {Pendiente:'B3261E', Proceso:'8A6100', Resuelto:'1E6B3E'};
 
-  downloadCsv('recorrido_evidencias_' + new Date().toISOString().slice(0,10) + '.csv', rows);
-  showToast('Archivo Excel (.csv) descargado');
+    const summary = computeSummary();
+    const hotels = Object.keys(summary).sort((a,b)=>hotelLabel(a).localeCompare(hotelLabel(b)));
+    const children = [];
+
+    // Encabezado
+    children.push(P(T('GRUPO MARTINÓN · Dirección Corporativa de Implementación y Procesos', {size:18, bold:true, color:GOLD}), {after:40}));
+    children.push(new D.Paragraph({children:[T('Levantamiento de Recorrido', {size:36, bold:true, color:NAVY})], spacing:{after:80},
+      border:{bottom:{style:D.BorderStyle.SINGLE, size:12, color:GOLD, space:4}}}));
+    children.push(P(T('Exportado: ' + new Date().toLocaleString('es-DO'), {size:18, color:'555555'}), {after:20}));
+    children.push(P(T('Filtro: ' + filterDescription(), {size:18, color:'555555'}), {after:240}));
+
+    // Resumen
+    children.push(P(T('Resumen por hotel', {size:26, bold:true, color:NAVY}), {after:100}));
+    const sw = [1000, 2450, 2000, 1200, 1050, 1050, 888];
+    const head = ['Spirit Code','Hotel','Director General','Pendiente','En proceso','Resuelto','Total'];
+    const sumRows = [new D.TableRow({tableHeader:true, children: head.map((h,k)=>cell(P(T(h,{bold:true,color:'FFFFFF',size:17}),{align:D.AlignmentType.CENTER,after:0}), sw[k], {fill:NAVY, vAlign:D.VerticalAlign.CENTER}))})];
+    let tp=0,tr=0,ts=0;
+    hotels.forEach(h=>{
+      const s = summary[h]; tp+=s.Pendiente; tr+=s.Proceso; ts+=s.Resuelto;
+      const vals = [hotelCode(h), h, directorFor(h), s.Pendiente, s.Proceso, s.Resuelto, s.Pendiente+s.Proceso+s.Resuelto];
+      sumRows.push(new D.TableRow({children: vals.map((v,k)=>cell(P(T(v,{size:18}),{align:k>2||k===0?D.AlignmentType.CENTER:D.AlignmentType.LEFT, after:0}), sw[k]))}));
+    });
+    const tots = ['TOTAL','','',tp,tr,ts,tp+tr+ts];
+    sumRows.push(new D.TableRow({children: tots.map((v,k)=>cell(P(T(v,{size:18,bold:true}),{align:D.AlignmentType.CENTER,after:0}), sw[k], {fill:'EEF0F3'}))}));
+    children.push(new D.Table({width:{size:CW, type:D.WidthType.DXA}, columnWidths:sw, rows:sumRows}));
+
+    // Detalle por hotel
+    const lw = [2000, CW-2000];
+    hotels.forEach((h)=>{
+      const list = filtered.filter(e=>e.hotel===h);
+      children.push(new D.Paragraph({children:[new D.PageBreak()]}));
+      children.push(new D.Paragraph({children:[T(hotelLabel(h), {size:28, bold:true, color:NAVY})], spacing:{after:40},
+        border:{bottom:{style:D.BorderStyle.SINGLE, size:8, color:GOLD, space:4}}}));
+      children.push(P(T('Director General: ' + (directorFor(h) || '—'), {size:20, color:'555555'}), {after:200}));
+
+      list.forEach((e, n)=>{
+        children.push(P(T('Evidencia ' + (n+1) + ' de ' + list.length, {size:22, bold:true, color:NAVY}), {before:n?240:0, after:80, keepNext:true}));
+        const row = (label, value, o={}) => new D.TableRow({cantSplit:true, children:[
+          cell(P(T(label,{bold:true,size:18,color:NAVY}),{after:0}), lw[0], {fill:'F4F5F7'}),
+          cell(P(T(value,{size:19,bold:!!o.bold,color:o.color}),{after:0}), lw[1], {fill:o.fill})
+        ]});
+        children.push(new D.Table({width:{size:CW, type:D.WidthType.DXA}, columnWidths:lw, rows:[
+          row('Área física', e.area),
+          row('Departamento', e.depto),
+          row('Estado', statusLabel(e.status), {bold:true, color:statusColor[e.status], fill:statusFill[e.status]}),
+          row('Fecha', fmtDateFull(e.createdAt)),
+          row('Comentario', e.comentario)
+        ]}));
+
+        const photos = (e.photos||[]).filter(Boolean).slice(0,2);
+        if(photos.length){
+          const maxW = photos.length === 1 ? 420 : 300, maxH = 340;
+          const pw = photos.length === 1 ? [CW] : [CW/2, CW/2];
+          const imgCells = photos.map((p,k)=>{
+            const bytes = dataUrlToBytes(p);
+            const info = imageInfo(bytes);
+            let w = maxW, hgt = Math.round(maxW * info.h / info.w);
+            if(hgt > maxH){ hgt = maxH; w = Math.round(maxH * info.w / info.h); }
+            return cell(new D.Paragraph({alignment:D.AlignmentType.CENTER, children:[new D.ImageRun({type:info.type, data:bytes, transformation:{width:w, height:hgt}})]}), pw[k], {noBorders:true});
+          });
+          children.push(P(T(''), {after:40}));
+          children.push(new D.Table({width:{size:CW, type:D.WidthType.DXA}, columnWidths:pw, rows:[new D.TableRow({cantSplit:true, children:imgCells})]}));
+        }
+      });
+    });
+
+    const doc = new D.Document({
+      styles:{default:{document:{run:{font:FONT, size:20}}}},
+      sections:[{
+        properties:{page:{size:{width:11906, height:16838}, margin:{top:1134, bottom:1134, left:1134, right:1134}}},
+        footers:{default:new D.Footer({children:[new D.Paragraph({alignment:D.AlignmentType.RIGHT, children:[
+          T('Grupo Martinón · Levantamiento de Recorrido · Página ', {size:16, color:'888888'}),
+          new D.TextRun({children:[D.PageNumber.CURRENT], font:FONT, size:16, color:'888888'})
+        ]})]})},
+        children
+      }]
+    });
+    const blob = await D.Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'recorrido_evidencias_' + new Date().toISOString().slice(0,10) + '.docx';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+    showToast('Documento Word descargado');
+  }catch(err){
+    console.error(err);
+    showToast('No se pudo generar el Word');
+  }
 });
 
 // ---- Export a PDF (impresión del navegador) ----
@@ -1155,6 +1387,14 @@ document.getElementById('btn-clear-demo').addEventListener('click', ()=>{
   renderEntries();
   showToast('Todas las evidencias fueron eliminadas');
 });
+
+// Reintentar sincronización: al tocar el estado o al recuperar internet
+document.getElementById('sync-text').parentElement.style.cursor = 'pointer';
+document.getElementById('sync-text').parentElement.addEventListener('click', ()=>{
+  if(lastSyncError && document.getElementById('sync-text').textContent.indexOf('sin conexión') > -1) console.log('Último error:', lastSyncError);
+  syncFromCloud();
+});
+window.addEventListener('online', ()=>syncFromCloud());
 
 // ---- Init ----
 loadEntries();
