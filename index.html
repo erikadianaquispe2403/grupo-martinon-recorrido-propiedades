@@ -318,7 +318,7 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@9.5.1/dist/index.iife.js"></script>
 </head>
 <body>
 
@@ -1294,7 +1294,7 @@ document.getElementById('btn-export-word').addEventListener('click', async ()=>{
 
         const photos = (e.photos||[]).filter(Boolean).slice(0,2);
         if(photos.length){
-          const maxW = photos.length === 1 ? 420 : 300, maxH = 340;
+          const maxW = photos.length === 1 ? 460 : 300, maxH = photos.length === 1 ? 480 : 400;
           const pw = photos.length === 1 ? [CW] : [CW/2, CW/2];
           const imgCells = photos.map((p,k)=>{
             const bytes = dataUrlToBytes(p);
