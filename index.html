@@ -139,7 +139,17 @@
   .status-btn[data-val="Pendiente"].active{border-color:var(--red);background:var(--red-bg);color:var(--red);}
   .status-btn[data-val="Proceso"].active{border-color:var(--amber);background:var(--amber-bg);color:var(--amber);}
   .status-btn[data-val="Resuelto"].active{border-color:var(--green);background:var(--green-bg);color:var(--green);}
-  .photos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .photos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:5px;}
+  .other-input{margin-top:8px;}
+  input[readonly]{background:#F4F5F7;color:var(--muted);}
+  .date-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+  .date-row label{font-size:12px;color:var(--muted);font-weight:600;}
+  .date-row input[type=date]{padding:7px 8px;font-size:13px;border:1px solid var(--line);border-radius:8px;font-family:inherit;}
+  .quick-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .quick-btns button{border:1px solid var(--line);background:#fff;border-radius:16px;padding:6px 12px;font-size:12.5px;cursor:pointer;color:var(--navy);font-family:inherit;}
+  .quick-btns button.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .filter-desc{font-size:12px;color:var(--muted);margin:0 0 10px;}
   .photo-slot{
     aspect-ratio:1/1;
     border:1.5px dashed var(--line);
@@ -176,7 +186,8 @@
   }
   .btn-save:active{background:#96772f;}
   .btn-save:disabled{background:#CBB98A;cursor:not-allowed;}
-  .filters{display:flex;gap:8px;margin-bottom:12px;}
+  .filters{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+  .filters select{flex:1;min-width:130px;}
   .filters select{padding:8px 10px;font-size:13.5px;}
   .summary-toggle{
     display:flex;align-items:center;gap:6px;
@@ -316,56 +327,34 @@
       <label for="f-hotel">Hotel</label>
       <select id="f-hotel">
         <option value="">Selecciona un hotel...</option>
-        <option>Dreams Flora Punta Cana</option>
-        <option>Dreams Royal Beach Punta Cana</option>
-        <option>Secrets Royal Beach Punta Cana</option>
-        <option>Dreams Onyx Punta Cana</option>
-        <option>Breathless Punta Cana</option>
-        <option>Secrets Baby Beach</option>
-        <option>Hyatt Centric Santo Domingo</option>
-        <option>JdV Royal Beach</option>
-        <option>Dreams Jade</option>
-        <option>Garden Inn by Hilton</option>
+        <option value="Dreams Flora Punta Cana">DRFPC — Dreams Flora Punta Cana</option>
+        <option value="Dreams Royal Beach Punta Cana">DRRPC — Dreams Royal Beach Punta Cana</option>
+        <option value="Secrets Royal Beach Punta Cana">SERPC — Secrets Royal Beach Punta Cana</option>
+        <option value="Dreams Onyx Punta Cana">DROPC — Dreams Onyx Punta Cana</option>
+        <option value="Breathless Punta Cana">BREPC — Breathless Punta Cana</option>
+        <option value="Secrets Baby Beach">SEAUA — Secrets Baby Beach</option>
+        <option value="Hyatt Centric Santo Domingo">SDQCT — Hyatt Centric Santo Domingo</option>
+        <option value="JdV Royal Beach">PUJJD — JdV Royal Beach</option>
+        <option value="Dreams Jade">DRJRC — Dreams Jade</option>
+        <option value="Garden Inn by Hilton">TBI — Garden Inn by Hilton</option>
       </select>
+    </div>
+
+    <div class="field">
+      <label for="f-director">Director General</label>
+      <input type="text" id="f-director" readonly placeholder="Se completa al seleccionar el hotel">
     </div>
 
     <div class="row2">
       <div class="field">
         <label for="f-area">Área física</label>
-        <input type="text" id="f-area" list="area-suggestions" placeholder="Ej: Lobby bar, Habitación 204...">
-        <datalist id="area-suggestions">
-          <option value="Lobby">
-          <option value="Lobby bar">
-          <option value="Recepción">
-          <option value="Restaurante principal">
-          <option value="Restaurante a la carta">
-          <option value="Piscina">
-          <option value="Playa">
-          <option value="Habitación">
-          <option value="Pasillo">
-          <option value="Spa">
-          <option value="Gimnasio">
-          <option value="Cocina">
-          <option value="Estacionamiento">
-          <option value="Área de empleados">
-        </datalist>
+        <select id="f-area"></select>
+        <input type="text" id="f-area-otro" class="other-input" placeholder="Escribe el área física..." style="display:none;">
       </div>
       <div class="field">
         <label for="f-depto">Departamento responsable</label>
-        <select id="f-depto">
-          <option value="">Selecciona...</option>
-          <option>A&B</option>
-          <option>Ama de Llaves</option>
-          <option>Mantenimiento</option>
-          <option>Recepción / Front Desk</option>
-          <option>Seguridad</option>
-          <option>Cocina</option>
-          <option>Animación / Entretenimiento</option>
-          <option>Recursos Humanos</option>
-          <option>IT / Sistemas</option>
-          <option>Compras / Almacén</option>
-          <option>Otro</option>
-        </select>
+        <select id="f-depto"></select>
+        <input type="text" id="f-depto-otro" class="other-input" placeholder="Escribe el departamento..." style="display:none;">
       </div>
     </div>
 
@@ -375,12 +364,12 @@
     </div>
 
     <div class="field">
-      <label>Fotografías (máx. 3)</label>
+      <label>Fotografías (máx. 2, opcionales)</label>
       <div class="photos-grid" id="photos-grid">
-        <div class="photo-slot" data-slot="0"><span class="plus">+</span><input type="file" accept="image/*" capture="environment"></div>
-        <div class="photo-slot" data-slot="1"><span class="plus">+</span><input type="file" accept="image/*" capture="environment"></div>
-        <div class="photo-slot" data-slot="2"><span class="plus">+</span><input type="file" accept="image/*" capture="environment"></div>
+        <div class="photo-slot" data-slot="0"><span class="plus">+</span><input type="file" accept="image/*" ></div>
+        <div class="photo-slot" data-slot="1"><span class="plus">+</span><input type="file" accept="image/*" ></div>
       </div>
+      <div class="hint">Toca un espacio para tomar la foto o elegirla de la galería.</div>
     </div>
 
     <div class="field">
@@ -411,6 +400,7 @@
   <div class="summary-section" id="summary-section">
     <h3>Resumen por hotel</h3>
     <p class="sub">Conteo de evidencias por estado, y detalle de áreas y departamentos responsables.</p>
+    <p class="filter-desc" id="summary-filter-desc"></p>
     <table class="summary-table" id="summary-counts-table">
       <thead>
         <tr><th>Hotel</th><th class="num">Pendiente</th><th class="num">Proceso</th><th class="num">Resuelto</th><th class="num">Total</th></tr>
@@ -421,6 +411,11 @@
   </div>
 
   <div class="filters">
+    <select id="filter-complejo">
+      <option value="">Todos los complejos</option>
+      <option value="Varallo">Varallo (DRRPC + SERPC)</option>
+      <option value="OCRE">OCRE (BREPC + DROPC)</option>
+    </select>
     <select id="filter-hotel"><option value="">Todos los hoteles</option></select>
     <select id="filter-status">
       <option value="">Todos los estados</option>
@@ -428,6 +423,16 @@
       <option>Proceso</option>
       <option>Resuelto</option>
     </select>
+  </div>
+  <div class="date-row">
+    <label for="filter-desde">Desde</label><input type="date" id="filter-desde">
+    <label for="filter-hasta">Hasta</label><input type="date" id="filter-hasta">
+  </div>
+  <div class="quick-btns">
+    <button type="button" data-range="hoy">Hoy</button>
+    <button type="button" data-range="semana">Esta semana</button>
+    <button type="button" data-range="mes">Este mes</button>
+    <button type="button" data-range="todo">Todo</button>
   </div>
 
   <div id="entries-list"></div>
@@ -475,11 +480,18 @@ async function sbFetchAll(){
   return sbRequest('GET', `${SUPABASE_TABLE}?select=*&order=created_at.desc`);
 }
 async function sbUpsert(entry){
-  return sbRequest('POST', SUPABASE_TABLE, [{
+  const row = {
     id: entry.id, hotel: entry.hotel, area: entry.area, depto: entry.depto,
     comentario: entry.comentario, status: entry.status, photos: entry.photos,
-    created_at: entry.createdAt
-  }]);
+    created_at: entry.createdAt, director: entry.director || null
+  };
+  try{
+    return await sbRequest('POST', SUPABASE_TABLE, [row]);
+  }catch(err){
+    // Si la columna director aún no existe en Supabase, guarda sin ella
+    delete row.director;
+    return sbRequest('POST', SUPABASE_TABLE, [row]);
+  }
 }
 async function sbDelete(id){
   return sbRequest('DELETE', `${SUPABASE_TABLE}?id=eq.${id}`);
@@ -496,9 +508,18 @@ function setSyncStatus(state){
   else { dot.classList.remove('online'); text.textContent = 'Guardado local (sin conexión)'; }
 }
 
+const HOTEL_CODES = {"Dreams Flora Punta Cana":"DRFPC","Dreams Royal Beach Punta Cana":"DRRPC","Secrets Royal Beach Punta Cana":"SERPC","Dreams Onyx Punta Cana":"DROPC","Breathless Punta Cana":"BREPC","Secrets Baby Beach":"SEAUA","Hyatt Centric Santo Domingo":"SDQCT","JdV Royal Beach":"PUJJD","Dreams Jade":"DRJRC","Garden Inn by Hilton":"TBI"};
+const DIRECTORS = {"SERPC":"Roberto Iglesias","DRRPC":"Greivin Rodríguez","BREPC":"Omar Saavedra","DROPC":"Alarilla Aragón","DRFPC":"Antonio Parrado","SEAUA":"José María Pérez","DRJRC":"Vithalys Muñoz","PUJJD":"Juan Sánchez","SDQCT":"Luis Gómez","TBI":""};
+const COMPLEJOS = {"Varallo":["DRRPC","SERPC"],"OCRE":["BREPC","DROPC"]};
+const BASE_AREAS = ["Lobby","Lobby bar","Recepción","Restaurante principal","Restaurante a la carta","Piscina","Playa","Habitación","Pasillo","Spa","Gimnasio","Cocina","Estacionamiento","Área de empleados"];
+const BASE_DEPTOS = ["A&B","Ama de Llaves","Mantenimiento","Recepción / Front Desk","Seguridad","Cocina","Animación / Entretenimiento","Recursos Humanos","IT / Sistemas","Compras / Almacén"];
+const OTRO = '__otro__';
+function directorFor(h){ return DIRECTORS[hotelCode(h)] || ''; }
+function hotelCode(h){ return HOTEL_CODES[h] || ''; }
+function hotelLabel(h){ const c = hotelCode(h); return c ? `${c} — ${h}` : h; }
 const HOTELS = ["Dreams Flora Punta Cana","Dreams Royal Beach Punta Cana","Secrets Royal Beach Punta Cana","Dreams Onyx Punta Cana","Breathless Punta Cana","Secrets Baby Beach","Hyatt Centric Santo Domingo","JdV Royal Beach","Dreams Jade","Garden Inn by Hilton"];
 
-let currentPhotos = [null, null, null];
+let currentPhotos = [null, null];
 let currentStatus = null;
 let entries = [];
 
@@ -515,7 +536,7 @@ function cloudRowToEntry(row){
   return {
     id: row.id, hotel: row.hotel, area: row.area, depto: row.depto,
     comentario: row.comentario, status: row.status, photos: row.photos || [],
-    createdAt: row.created_at
+    createdAt: row.created_at, director: row.director || ''
   };
 }
 async function syncFromCloud(){
@@ -525,6 +546,7 @@ async function syncFromCloud(){
     const rows = await sbFetchAll();
     entries = rows.map(cloudRowToEntry);
     saveEntries();
+    populateLearnedOptions();
     renderEntries();
     setSyncStatus('online');
   }catch(e){
@@ -598,7 +620,7 @@ function renderPhotoSlot(slot, idx, dataUrl){
   });
 }
 function resetPhotoSlot(slot, idx){
-  slot.innerHTML = `<span class="plus">+</span><input type="file" accept="image/*" capture="environment">`;
+  slot.innerHTML = `<span class="plus">+</span><input type="file" accept="image/*" >`;
   slot.querySelector('input').addEventListener('change', async (e)=>{
     const file = e.target.files[0];
     if(!file) return;
@@ -616,19 +638,20 @@ function resetPhotoSlot(slot, idx){
 // ---- Save entry ----
 document.getElementById('btn-save').addEventListener('click', ()=>{
   const hotel = document.getElementById('f-hotel').value;
-  const area = document.getElementById('f-area').value.trim();
-  const depto = document.getElementById('f-depto').value;
+  const area = getSelectOrOther('f-area','f-area-otro');
+  const depto = getSelectOrOther('f-depto','f-depto-otro');
+  const director = directorFor(hotel);
   const comentario = document.getElementById('f-comentario').value.trim();
 
   if(!hotel){ showToast('Selecciona el hotel'); return; }
-  if(!area){ showToast('Indica el área física'); return; }
-  if(!depto){ showToast('Selecciona el departamento'); return; }
+  if(!area){ showToast('Selecciona o escribe el área física'); return; }
+  if(!depto){ showToast('Selecciona o escribe el departamento'); return; }
   if(!comentario){ showToast('Escribe un comentario'); return; }
   if(!currentStatus){ showToast('Selecciona un estado'); return; }
 
   const entry = {
     id: 'ev_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-    hotel, area, depto, comentario,
+    hotel, director, area, depto, comentario,
     status: currentStatus,
     photos: currentPhotos.filter(p=>p),
     createdAt: new Date().toISOString()
@@ -636,6 +659,7 @@ document.getElementById('btn-save').addEventListener('click', ()=>{
   entries.unshift(entry);
   saveEntries();
   resetForm();
+  populateLearnedOptions();
   renderEntries();
   showToast('Evidencia guardada');
 
@@ -650,24 +674,116 @@ document.getElementById('btn-save').addEventListener('click', ()=>{
 
 function resetForm(){
   document.getElementById('f-hotel').value = '';
+  document.getElementById('f-director').value = '';
   document.getElementById('f-area').value = '';
   document.getElementById('f-depto').value = '';
+  ['f-area-otro','f-depto-otro'].forEach(id=>{ const el=document.getElementById(id); el.value=''; el.style.display='none'; });
   document.getElementById('f-comentario').value = '';
   document.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('active'));
   currentStatus = null;
-  currentPhotos = [null, null, null];
+  currentPhotos = [null, null];
   document.querySelectorAll('.photo-slot').forEach((slot,idx)=>resetPhotoSlot(slot, idx));
 }
 
+// ---- Área / Departamento con "Otro" que se aprende ----
+function uniqueSorted(arr){ return [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')); }
+function fillSelect(id, base, field){
+  const sel = document.getElementById(id);
+  const prev = sel.value;
+  const baseLower = base.map(x=>x.toLowerCase());
+  const learned = uniqueSorted(entries.map(e=>(e[field]||'').trim()))
+    .filter(v=>v.toLowerCase()!=='otro' && !baseLower.includes(v.toLowerCase()));
+  const all = uniqueSorted(base.concat(learned));
+  sel.innerHTML = '<option value="">Selecciona...</option>' +
+    all.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('') +
+    `<option value="${OTRO}">Otro (escribir)</option>`;
+  if(prev && [...sel.options].some(o=>o.value===prev)) sel.value = prev;
+}
+function populateLearnedOptions(){
+  fillSelect('f-area', BASE_AREAS, 'area');
+  fillSelect('f-depto', BASE_DEPTOS, 'depto');
+}
+function wireOther(selId, inputId){
+  const sel = document.getElementById(selId), inp = document.getElementById(inputId);
+  sel.addEventListener('change', ()=>{
+    const isOtro = sel.value === OTRO;
+    inp.style.display = isOtro ? 'block' : 'none';
+    if(isOtro) inp.focus(); else inp.value = '';
+  });
+}
+function getSelectOrOther(selId, inputId){
+  const v = document.getElementById(selId).value;
+  if(v === OTRO) return document.getElementById(inputId).value.trim();
+  return v;
+}
+wireOther('f-area','f-area-otro');
+wireOther('f-depto','f-depto-otro');
+document.getElementById('f-hotel').addEventListener('change', (e)=>{
+  document.getElementById('f-director').value = directorFor(e.target.value);
+});
+
 // ---- Filters ----
 const filterHotel = document.getElementById('filter-hotel');
-HOTELS.forEach(h=>{
-  const opt = document.createElement('option');
-  opt.value = h; opt.textContent = h;
-  filterHotel.appendChild(opt);
-});
+const filterComplejo = document.getElementById('filter-complejo');
+const filterDesde = document.getElementById('filter-desde');
+const filterHasta = document.getElementById('filter-hasta');
+function populateHotelFilter(){
+  const comp = filterComplejo.value;
+  const prev = filterHotel.value;
+  const list = comp ? HOTELS.filter(h=>COMPLEJOS[comp].includes(hotelCode(h))) : HOTELS;
+  filterHotel.innerHTML = '<option value="">' + (comp ? 'Todos los hoteles de ' + comp : 'Todos los hoteles') + '</option>' +
+    list.map(h=>`<option value="${h}">${hotelLabel(h)}</option>`).join('');
+  if(list.includes(prev)) filterHotel.value = prev;
+}
+populateHotelFilter();
+filterComplejo.addEventListener('change', ()=>{ populateHotelFilter(); renderEntries(); });
 filterHotel.addEventListener('change', renderEntries);
 document.getElementById('filter-status').addEventListener('change', renderEntries);
+[filterDesde, filterHasta].forEach(el=>el.addEventListener('change', ()=>{ setQuickActive(null); renderEntries(); }));
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function setQuickActive(range){
+  document.querySelectorAll('.quick-btns button').forEach(b=>b.classList.toggle('active', b.dataset.range===range));
+}
+document.querySelectorAll('.quick-btns button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const today = new Date();
+    const range = btn.dataset.range;
+    if(range === 'todo'){ filterDesde.value=''; filterHasta.value=''; }
+    else{
+      let start = new Date(today);
+      if(range === 'semana'){ const dow = (today.getDay()+6)%7; start.setDate(today.getDate()-dow); }
+      if(range === 'mes'){ start = new Date(today.getFullYear(), today.getMonth(), 1); }
+      filterDesde.value = ymd(start); filterHasta.value = ymd(today);
+    }
+    setQuickActive(range);
+    renderEntries();
+  });
+});
+function getFiltered(){
+  const comp = filterComplejo.value, hotelF = filterHotel.value;
+  const statusF = document.getElementById('filter-status').value;
+  const desde = filterDesde.value, hasta = filterHasta.value;
+  return entries.filter(e=>{
+    if(comp && !COMPLEJOS[comp].includes(hotelCode(e.hotel))) return false;
+    if(hotelF && e.hotel !== hotelF) return false;
+    if(statusF && e.status !== statusF) return false;
+    const d = ymd(new Date(e.createdAt));
+    if(desde && d < desde) return false;
+    if(hasta && d > hasta) return false;
+    return true;
+  });
+}
+function fmtDay(s){ const [y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }
+function filterDescription(){
+  const parts = [];
+  if(filterComplejo.value) parts.push('Complejo: ' + filterComplejo.value);
+  if(filterHotel.value) parts.push('Hotel: ' + hotelLabel(filterHotel.value));
+  const st = document.getElementById('filter-status').value;
+  if(st) parts.push('Estado: ' + statusLabel(st));
+  const de = filterDesde.value, ha = filterHasta.value;
+  if(de || ha) parts.push('Periodo: ' + (de?fmtDay(de):'inicio') + ' – ' + (ha?fmtDay(ha):'hoy'));
+  return parts.length ? parts.join(' · ') : 'Todas las evidencias';
+}
 
 // ---- Render list ----
 function fmtDate(iso){
@@ -678,13 +794,7 @@ function statusLabel(s){
   return s === 'Proceso' ? 'En proceso' : s;
 }
 function renderEntries(){
-  const hotelF = filterHotel.value;
-  const statusF = document.getElementById('filter-status').value;
-  const list = entries.filter(e=>{
-    if(hotelF && e.hotel !== hotelF) return false;
-    if(statusF && e.status !== statusF) return false;
-    return true;
-  });
+  const list = getFiltered();
 
   const container = document.getElementById('entries-list');
   document.getElementById('count-pill').textContent = entries.length;
@@ -700,8 +810,9 @@ function renderEntries(){
     <div class="entry ${e.status}">
       <div class="entry-top">
         <div>
-          <div class="entry-hotel">${e.hotel}</div>
-          <div class="entry-meta">${e.area} · ${e.depto} · ${fmtDate(e.createdAt)}</div>
+          <div class="entry-hotel">${hotelLabel(e.hotel)}</div>
+          ${e.director ? `<div class="entry-meta">Director: ${escapeHtml(e.director)}</div>` : ''}
+          <div class="entry-meta">${escapeHtml(e.area)} · ${escapeHtml(e.depto)} · ${fmtDate(e.createdAt)}</div>
         </div>
         <span class="badge ${e.status}">${statusLabel(e.status)}</span>
       </div>
@@ -770,7 +881,7 @@ document.getElementById('lightbox').addEventListener('click', (e)=>{
 // ---- Resumen por hotel ----
 function computeSummary(){
   const byHotel = {};
-  entries.forEach(e=>{
+  getFiltered().forEach(e=>{
     if(!byHotel[e.hotel]) byHotel[e.hotel] = {Pendiente:0, Proceso:0, Resuelto:0, rows:[]};
     byHotel[e.hotel][e.status] = (byHotel[e.hotel][e.status]||0) + 1;
     byHotel[e.hotel].rows.push({area:e.area, depto:e.depto, status:e.status, comentario:e.comentario, fecha:e.createdAt});
@@ -779,12 +890,13 @@ function computeSummary(){
 }
 function renderSummary(){
   const summary = computeSummary();
-  const hotels = Object.keys(summary).sort();
+  const hotels = Object.keys(summary).sort((a,b)=>hotelLabel(a).localeCompare(hotelLabel(b)));
   const countsBody = document.querySelector('#summary-counts-table tbody');
   const blocksContainer = document.getElementById('summary-hotel-blocks');
+  document.getElementById('summary-filter-desc').textContent = 'Filtro aplicado: ' + filterDescription();
 
   if(hotels.length === 0){
-    countsBody.innerHTML = `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:14px;">Aún no hay evidencias registradas.</td></tr>`;
+    countsBody.innerHTML = `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:14px;">No hay evidencias para los filtros seleccionados.</td></tr>`;
     blocksContainer.innerHTML = '';
     return;
   }
@@ -792,7 +904,7 @@ function renderSummary(){
   countsBody.innerHTML = hotels.map(h=>{
     const s = summary[h];
     const total = s.Pendiente + s.Proceso + s.Resuelto;
-    return `<tr><td>${h}</td><td class="num">${s.Pendiente}</td><td class="num">${s.Proceso}</td><td class="num">${s.Resuelto}</td><td class="num">${total}</td></tr>`;
+    return `<tr><td>${hotelLabel(h)}</td><td class="num">${s.Pendiente}</td><td class="num">${s.Proceso}</td><td class="num">${s.Resuelto}</td><td class="num">${total}</td></tr>`;
   }).join('');
 
   blocksContainer.innerHTML = hotels.map(h=>{
@@ -805,7 +917,7 @@ function renderSummary(){
       </tr>`).join('');
     return `
       <div class="hotel-block">
-        <div class="hotel-block-title">${h}</div>
+        <div class="hotel-block-title">${hotelLabel(h)}${directorFor(h) ? ' · Director: ' + directorFor(h) : ''}</div>
         <div class="count-badges">
           <span class="c-pend">${s.Pendiente} pendiente${s.Pendiente===1?'':'s'}</span>
           <span class="c-proc">${s.Proceso} en proceso</span>
@@ -842,35 +954,37 @@ function downloadCsv(filename, rows){
 
 // ---- Export a Excel (.csv) ----
 document.getElementById('btn-export-excel').addEventListener('click', ()=>{
-  if(entries.length === 0){ showToast('No hay evidencias para exportar'); return; }
+  const filtered = getFiltered();
+  if(filtered.length === 0){ showToast('No hay evidencias para los filtros seleccionados'); return; }
   const summary = computeSummary();
-  const hotels = Object.keys(summary).sort();
+  const hotels = Object.keys(summary).sort((a,b)=>hotelLabel(a).localeCompare(hotelLabel(b)));
   const rows = [];
 
   rows.push(['LEVANTAMIENTO DE RECORRIDO — GRUPO MARTINÓN']);
   rows.push(['Exportado', new Date().toLocaleString('es-DO')]);
+  rows.push(['Filtro', filterDescription()]);
   rows.push([]);
 
   rows.push(['DETALLE DE EVIDENCIAS']);
-  rows.push(['Hotel','Área','Departamento','Comentario','Estado','Fecha']);
-  entries.forEach(e=>{
-    rows.push([e.hotel, e.area, e.depto, e.comentario, statusLabel(e.status), fmtDate(e.createdAt)]);
+  rows.push(['Spirit Code','Hotel','Director General','Área','Departamento','Comentario','Estado','Fecha']);
+  filtered.forEach(e=>{
+    rows.push([hotelCode(e.hotel), e.hotel, e.director || directorFor(e.hotel), e.area, e.depto, e.comentario, statusLabel(e.status), fmtDate(e.createdAt)]);
   });
   rows.push([]);
 
   rows.push(['RESUMEN POR HOTEL']);
-  rows.push(['Hotel','Pendiente','Proceso','Resuelto','Total']);
+  rows.push(['Spirit Code','Hotel','Director General','Pendiente','Proceso','Resuelto','Total']);
   hotels.forEach(h=>{
     const s = summary[h];
-    rows.push([h, s.Pendiente, s.Proceso, s.Resuelto, s.Pendiente+s.Proceso+s.Resuelto]);
+    rows.push([hotelCode(h), h, directorFor(h), s.Pendiente, s.Proceso, s.Resuelto, s.Pendiente+s.Proceso+s.Resuelto]);
   });
   rows.push([]);
 
   rows.push(['RESPONSABLES POR HOTEL']);
-  rows.push(['Hotel','Área','Departamento responsable','Estado']);
+  rows.push(['Spirit Code','Hotel','Área','Departamento responsable','Estado']);
   hotels.forEach(h=>{
     summary[h].rows.forEach(r=>{
-      rows.push([h, r.area, r.depto, statusLabel(r.status)]);
+      rows.push([hotelCode(h), h, r.area, r.depto, statusLabel(r.status)]);
     });
   });
 
@@ -880,7 +994,7 @@ document.getElementById('btn-export-excel').addEventListener('click', ()=>{
 
 // ---- Export a PDF (impresión del navegador) ----
 document.getElementById('btn-export-pdf').addEventListener('click', ()=>{
-  if(entries.length === 0){ showToast('No hay evidencias para exportar'); return; }
+  if(getFiltered().length === 0){ showToast('No hay evidencias para los filtros seleccionados'); return; }
   document.getElementById('summary-section').classList.add('open');
   renderSummary();
   setTimeout(()=>window.print(), 150);
@@ -930,6 +1044,7 @@ document.getElementById('btn-clear-demo').addEventListener('click', ()=>{
 // ---- Init ----
 loadEntries();
 seedDemoIfNeeded();
+populateLearnedOptions();
 renderEntries();
 setSyncStatus(SYNC_ENABLED ? 'syncing' : 'local');
 syncFromCloud();
