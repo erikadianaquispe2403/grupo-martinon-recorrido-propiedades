@@ -149,6 +149,14 @@
   .quick-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
   .quick-btns button{border:1px solid var(--line);background:#fff;border-radius:16px;padding:6px 12px;font-size:12.5px;cursor:pointer;color:var(--navy);font-family:inherit;}
   .quick-btns button.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .voice-box{border:1px dashed var(--gold);border-radius:var(--radius);padding:12px;margin-bottom:14px;background:#FFFCF5;}
+  .btn-voice{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:700;background:var(--gold);color:#fff;cursor:pointer;font-family:inherit;}
+  .btn-voice.listening{background:var(--red);animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.75}}
+  .voice-live{font-size:13px;color:var(--ink);margin-top:8px;min-height:0;font-style:italic;}
+  .voice-result{font-size:12.5px;margin-top:8px;line-height:1.6;}
+  .voice-result .ok{color:var(--green);font-weight:600;}
+  .voice-result .no{color:var(--amber);font-weight:600;}
   .filter-desc{font-size:12px;color:var(--muted);margin:0 0 10px;}
   .photo-slot{
     aspect-ratio:1/1;
@@ -343,6 +351,13 @@
     <div class="field">
       <label for="f-director">Director General</label>
       <input type="text" id="f-director" readonly placeholder="Se completa al seleccionar el hotel">
+    </div>
+
+    <div class="voice-box">
+      <button type="button" class="btn-voice" id="btn-voice">🎤 Hablar para llenar</button>
+      <div class="hint" id="voice-hint">Ej: "En el lobby bar, silla rota, le toca a mantenimiento, está pendiente". Toca otra vez para terminar.</div>
+      <div class="voice-live" id="voice-live"></div>
+      <div class="voice-result" id="voice-result"></div>
     </div>
 
     <div class="row2">
@@ -677,6 +692,8 @@ function resetForm(){
   document.getElementById('f-director').value = '';
   document.getElementById('f-area').value = '';
   document.getElementById('f-depto').value = '';
+  document.getElementById('voice-live').textContent = '';
+  document.getElementById('voice-result').innerHTML = '';
   ['f-area-otro','f-depto-otro'].forEach(id=>{ const el=document.getElementById(id); el.value=''; el.style.display='none'; });
   document.getElementById('f-comentario').value = '';
   document.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('active'));
@@ -721,6 +738,104 @@ wireOther('f-depto','f-depto-otro');
 document.getElementById('f-hotel').addEventListener('change', (e)=>{
   document.getElementById('f-director').value = directorFor(e.target.value);
 });
+
+// ---- Dictado por voz ----
+const DEPTO_SYNONYMS = {
+  "A&B":["a y b","ayb","alimentos y bebidas","bar","bares","restaurante","mesero","meseros"],
+  "Ama de Llaves":["ama de llaves","housekeeping","camarista","camaristas","limpieza"],
+  "Mantenimiento":["mantenimiento","ingenieria"],
+  "Recepción / Front Desk":["recepcion","front desk","front","lobby manager"],
+  "Seguridad":["seguridad"],
+  "Cocina":["cocina","chef","cocineros"],
+  "Animación / Entretenimiento":["animacion","entretenimiento","animadores"],
+  "Recursos Humanos":["recursos humanos","rrhh","gestion humana"],
+  "IT / Sistemas":["it","sistemas","tecnologia","informatica"],
+  "Compras / Almacén":["compras","almacen"]
+};
+function norm(t){ return (t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9ñ&\s]/g,' ').replace(/\s+/g,' ').trim(); }
+function hasPhrase(text, phrase){ const p = norm(phrase); return p && (' '+text+' ').includes(' '+p+' '); }
+function findBestOption(text, options, synonyms){
+  // Devuelve la opción cuyo nombre (o sinónimo) aparece en el texto; si hay varias, la más larga.
+  let best = null, bestLen = 0;
+  options.forEach(opt=>{
+    const cands = [opt].concat((synonyms && synonyms[opt]) || []);
+    cands.forEach(c=>{
+      if(hasPhrase(text, c) && norm(c).length > bestLen){ best = opt; bestLen = norm(c).length; }
+    });
+  });
+  return best;
+}
+function optionValues(selId){
+  return [...document.getElementById(selId).options].map(o=>o.value).filter(v=>v && v!==OTRO);
+}
+function detectStatus(text){
+  if(/\ben proceso\b|\bse esta trabajando\b|\ben curso\b/.test(text)) return 'Proceso';
+  if(/\bresuelt[oa]s?\b|\bsolucionad[oa]s?\b|\blist[oa]\b|\bcorregid[oa]\b/.test(text)) return 'Resuelto';
+  if(/\bpendientes?\b/.test(text)) return 'Pendiente';
+  return null;
+}
+function applyVoice(transcript){
+  const text = norm(transcript);
+  if(!text) return;
+  const out = [];
+  const area = findBestOption(text, optionValues('f-area'));
+  if(area){ document.getElementById('f-area').value = area; document.getElementById('f-area').dispatchEvent(new Event('change')); }
+  out.push(area ? `<span class="ok">✓ Área:</span> ${escapeHtml(area)}` : `<span class="no">✗ Área:</span> no detectada, selecciónala`);
+  const depto = findBestOption(text, optionValues('f-depto'), DEPTO_SYNONYMS);
+  if(depto){ document.getElementById('f-depto').value = depto; document.getElementById('f-depto').dispatchEvent(new Event('change')); }
+  out.push(depto ? `<span class="ok">✓ Departamento:</span> ${escapeHtml(depto)}` : `<span class="no">✗ Departamento:</span> no detectado, selecciónalo`);
+  const st = detectStatus(text);
+  if(st){ const b = document.querySelector(`.status-btn[data-val="${st}"]`); if(b) b.click(); }
+  out.push(st ? `<span class="ok">✓ Estado:</span> ${statusLabel(st)}` : `<span class="no">✗ Estado:</span> no detectado, selecciónalo`);
+  const com = document.getElementById('f-comentario');
+  let clean = transcript.trim(); clean = clean.charAt(0).toUpperCase() + clean.slice(1);
+  if(!/[.!?]$/.test(clean)) clean += '.';
+  com.value = com.value.trim() ? com.value.trim() + ' ' + clean : clean;
+  out.push(`<span class="ok">✓ Comentario</span> agregado — revísalo antes de guardar`);
+  document.getElementById('voice-result').innerHTML = out.join('<br>');
+}
+(function setupVoice(){
+  const btn = document.getElementById('btn-voice');
+  const live = document.getElementById('voice-live');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    btn.disabled = true; btn.style.opacity = .5;
+    document.getElementById('voice-hint').textContent = 'Este navegador no permite dictado por voz. Usa Chrome, Edge o Safari (iPhone).';
+    return;
+  }
+  if(location.protocol === 'file:'){
+    document.getElementById('voice-hint').textContent = 'El micrófono solo funciona desde el link de GitHub Pages, no desde un archivo descargado.';
+  }
+  let rec = null, listening = false, finalText = '';
+  function stopUI(){ listening = false; btn.classList.remove('listening'); btn.textContent = '🎤 Hablar para llenar'; }
+  btn.addEventListener('click', ()=>{
+    if(listening){ rec && rec.stop(); return; }
+    if(!document.getElementById('f-hotel').value){ showToast('Selecciona primero el hotel'); return; }
+    rec = new SR();
+    rec.lang = 'es-DO'; rec.continuous = true; rec.interimResults = true;
+    finalText = ''; live.textContent = ''; document.getElementById('voice-result').innerHTML = '';
+    rec.onresult = (ev)=>{
+      let interim = '';
+      for(let i = ev.resultIndex; i < ev.results.length; i++){
+        const t = ev.results[i][0].transcript;
+        if(ev.results[i].isFinal) finalText += t + ' '; else interim += t;
+      }
+      live.textContent = (finalText + interim).trim();
+    };
+    rec.onerror = (ev)=>{
+      if(ev.error === 'not-allowed' || ev.error === 'service-not-allowed') showToast('Permite el uso del micrófono en el navegador');
+      else if(ev.error === 'network') showToast('Se necesita internet para el dictado');
+      else if(ev.error !== 'no-speech' && ev.error !== 'aborted') showToast('Error de micrófono: ' + ev.error);
+    };
+    rec.onend = ()=>{
+      stopUI();
+      const text = (finalText || live.textContent).trim();
+      if(text){ applyVoice(text); live.textContent = '“' + text + '”'; }
+    };
+    try{ rec.start(); listening = true; btn.classList.add('listening'); btn.textContent = '⏹ Escuchando… toca para terminar'; }
+    catch(e){ showToast('No se pudo iniciar el micrófono'); }
+  });
+})();
 
 // ---- Filters ----
 const filterHotel = document.getElementById('filter-hotel');
