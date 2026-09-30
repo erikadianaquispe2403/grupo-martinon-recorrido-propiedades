@@ -663,6 +663,13 @@ function resetPhotoSlot(slot, idx){
   });
 }
 
+// Estado por defecto: Pendiente (se puede cambiar tocando otro botón o por voz)
+function setDefaultStatus(){
+  document.querySelectorAll('.status-btn').forEach(b=>b.classList.toggle('active', b.dataset.val==='Pendiente'));
+  currentStatus = 'Pendiente';
+}
+setDefaultStatus();
+
 // ---- Save entry ----
 document.getElementById('btn-save').addEventListener('click', ()=>{
   const hotel = document.getElementById('f-hotel').value;
@@ -711,8 +718,7 @@ function resetForm(){
   document.getElementById('voice-result').innerHTML = '';
   ['f-area-otro','f-depto-otro'].forEach(id=>{ const el=document.getElementById(id); el.value=''; el.style.display='none'; });
   document.getElementById('f-comentario').value = '';
-  document.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('active'));
-  currentStatus = null;
+  setDefaultStatus();
   currentPhotos = [null, null];
   document.querySelectorAll('.photo-slot').forEach((slot,idx)=>resetPhotoSlot(slot, idx));
 }
@@ -831,7 +837,7 @@ function applyVoice(transcript){
   out.push(depto ? `<span class="ok">✓ Departamento:</span> ${escapeHtml(depto)}` : `<span class="no">✗ Departamento:</span> no detectado, selecciónalo`);
   const st = detectStatus(estadoText);
   if(st){ const b = document.querySelector(`.status-btn[data-val="${st}"]`); if(b) b.click(); }
-  out.push(st ? `<span class="ok">✓ Estado:</span> ${statusLabel(st)}` : `<span class="no">✗ Estado:</span> no detectado, selecciónalo`);
+  out.push(st ? `<span class="ok">✓ Estado:</span> ${statusLabel(st)}` : `<span class="ok">✓ Estado:</span> Pendiente (por defecto)`);
 
   // Comentario: solo la descripción (sin las partes de departamento/estado ya capturadas)
   let clean = sec.hasKeys ? [sec.pre, sec.area].filter(Boolean).join(' ').trim() : transcript.trim();
