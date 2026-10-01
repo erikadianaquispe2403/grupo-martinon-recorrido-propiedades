@@ -506,6 +506,8 @@ async function sbUpsert(entry){
     comentario: entry.comentario, status: entry.status, photos: entry.photos,
     created_at: entry.createdAt, director: entry.director || null
   };
+  // Si las fotos solo están en la nube (no en el teléfono), no las sobrescribas
+  if(entry._photosInCloud && !(entry.photos||[]).length) delete row.photos;
   try{
     return await sbRequest('POST', SUPABASE_TABLE, [row]);
   }catch(err){
@@ -554,8 +556,19 @@ function loadEntries(){
     entries = raw ? JSON.parse(raw) : [];
   }catch(e){ entries = []; }
 }
+// En el teléfono solo se guardan las fotos de las evidencias que aún no suben a la nube.
+// Las ya sincronizadas guardan sus fotos en Supabase. Así el almacenamiento local no se llena.
 function saveEntries(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  const lite = entries.map(e => (e._pending ? e : Object.assign({}, e, {photos: [], _photosInCloud: (e.photos||[]).length})));
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lite));
+  }catch(err){
+    // Último recurso: guardar sin ninguna foto para no bloquear el registro
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.map(e=>Object.assign({}, e, {photos: []}))));
+      showToast('Memoria del teléfono llena: las fotos pendientes solo quedan en la nube al sincronizar');
+    }catch(e2){ console.warn('No se pudo guardar localmente', e2); }
+  }
 }
 function cloudRowToEntry(row){
   return {
@@ -689,7 +702,8 @@ document.getElementById('btn-save').addEventListener('click', ()=>{
     hotel, director, area, depto, comentario,
     status: currentStatus,
     photos: currentPhotos.filter(p=>p),
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    _pending: true
   };
   entries.unshift(entry);
   saveEntries();
@@ -700,7 +714,7 @@ document.getElementById('btn-save').addEventListener('click', ()=>{
 
   if(SYNC_ENABLED){
     setSyncStatus('syncing');
-    sbUpsert(entry).then(()=>setSyncStatus('online')).catch((err)=>{
+    sbUpsert(entry).then(()=>{ delete entry._pending; saveEntries(); setSyncStatus('online'); }).catch((err)=>{
       lastSyncError = String(err && err.message || err);
       entry._pending = true; saveEntries();
       setSyncStatus('offline');
