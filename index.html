@@ -360,7 +360,7 @@
 
     <div class="voice-box">
       <button type="button" class="btn-voice" id="btn-voice">🎤 Hablar para llenar</button>
-      <div class="hint" id="voice-hint">Ej: "En el lobby bar, silla rota, le toca a mantenimiento, está pendiente". Toca otra vez para terminar.</div>
+      <div class="hint" id="voice-hint">Ej: "Área consultorio médico. Comentario lámpara fundida. Departamento mantenimiento." Toca otra vez para terminar.</div>
       <div class="voice-live" id="voice-live"></div>
       <div class="voice-result" id="voice-result"></div>
     </div>
@@ -837,44 +837,103 @@ function collapseRepeats(text){
 }
 // Separa la frase por palabras clave: "área ...", "departamento ...", "estado ...", "responsable ..."
 function splitByKeywords(transcript){
-  const parts = transcript.split(/(?:^|\s)(departamento|estado|responsable|área|area)(?=[\s,.:;]|$)/i);
-  const out = {pre: parts[0] || '', area: '', departamento: '', estado: '', responsable: '', hasKeys: parts.length > 1};
+  const parts = transcript.split(/(?:^|\s)(departamento|estado|responsable|comentarios?|área|area)(?=[\s,.:;]|$)/i);
+  const out = {pre: parts[0] || '', area: '', departamento: '', estado: '', responsable: '', comentario: '', hasKeys: parts.length > 1};
   for(let i = 1; i < parts.length; i += 2){
-    const k = norm(parts[i]);
+    let k = norm(parts[i]); if(k === 'comentarios') k = 'comentario';
     const v = (parts[i+1] || '').replace(/^[\s,.:;]+|[\s,.:;]+$/g,'');
     if(out[k] !== undefined) out[k] = (out[k] ? out[k] + ' ' : '') + v;
   }
   return out;
+}
+// Palabras que suelen marcar dónde termina el nombre del área y empieza la descripción
+const NAME_STOP = new Set(['hay','tiene','tienen','presenta','presentan','con','esta','estan','se','falta','faltan','necesita','necesitan','sin','que','porque','donde','pero','y','roto','rota','rotos','rotas','sucio','sucia','sucios','sucias','danado','danada','fundido','fundida','mal','malo','mala']);
+function cap(t){ t = (t||'').trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; }
+// Toma el nombre (área o departamento) del inicio de la frase
+function extractName(phrase, maxWords, untilEnd){
+  const words = (phrase||'').trim().split(/\s+/).filter(Boolean);
+  const out = [];
+  for(const w of words){
+    const bare = w.replace(/[,.;:!?]+$/,'');
+    if(!untilEnd && out.length && NAME_STOP.has(norm(bare))) break;
+    if(bare) out.push(bare);
+    if(/[,.;:!?]$/.test(w) || out.length >= maxWords) break;
+  }
+  return out.join(' ');
+}
+// Opción existente con la que EMPIEZA la frase (ej. "lobby lámpara fundida" -> Lobby)
+function matchStart(phrase, options, synonyms){
+  const t = norm(phrase);
+  let best = null, bestLen = 0;
+  options.forEach(opt=>{
+    [opt].concat((synonyms && synonyms[opt]) || []).forEach(c=>{
+      const n = norm(c);
+      if(n && (t === n || t.startsWith(n + ' ')) && n.length > bestLen){ best = opt; bestLen = n.length; }
+    });
+  });
+  return best;
+}
+function setSelectOrNew(selId, inputId, value, isNew){
+  const sel = document.getElementById(selId);
+  sel.value = isNew ? OTRO : value;
+  sel.dispatchEvent(new Event('change'));
+  if(isNew) document.getElementById(inputId).value = value;
 }
 function applyVoice(transcript){
   const text = norm(transcript);
   if(!text) return;
   const out = [];
   const sec = splitByKeywords(transcript);
-  const areaText = norm(sec.hasKeys ? (sec.area || sec.pre) : transcript);
-  const deptoText = norm(sec.departamento || transcript);
-  const estadoText = norm(sec.estado || transcript);
 
-  const area = findBestOption(areaText, optionValues('f-area'));
-  if(area){ document.getElementById('f-area').value = area; document.getElementById('f-area').dispatchEvent(new Event('change')); }
-  out.push(area ? `<span class="ok">✓ Área:</span> ${escapeHtml(area)}` : `<span class="no">✗ Área:</span> no detectada, selecciónala`);
-  const depto = findBestOption(deptoText, optionValues('f-depto'), DEPTO_SYNONYMS);
-  if(depto){ document.getElementById('f-depto').value = depto; document.getElementById('f-depto').dispatchEvent(new Event('change')); }
-  out.push(depto ? `<span class="ok">✓ Departamento:</span> ${escapeHtml(depto)}` : `<span class="no">✗ Departamento:</span> no detectado, selecciónalo`);
-  const st = detectStatus(estadoText);
+  // ---- Área ----
+  const areaOpts = optionValues('f-area');
+  let area = null, areaNew = null;
+  if(sec.area){
+    area = matchStart(sec.area, areaOpts);
+    if(!area){
+      const name = extractName(sec.area, sec.comentario ? 6 : 4, !!sec.comentario);
+      // Si el nombre coincide con una opción (sin importar acentos), usarla
+      area = areaOpts.find(o=>norm(o)===norm(name)) || null;
+      if(!area && name) areaNew = cap(name);
+    }
+  } else {
+    area = findBestOption(norm(sec.hasKeys ? sec.pre : transcript), areaOpts);
+  }
+  if(area) setSelectOrNew('f-area','f-area-otro', area, false);
+  else if(areaNew) setSelectOrNew('f-area','f-area-otro', areaNew, true);
+  out.push(area ? `<span class="ok">✓ Área:</span> ${escapeHtml(area)}`
+    : areaNew ? `<span class="ok">✓ Área nueva:</span> ${escapeHtml(areaNew)} <span style="color:var(--muted)">(se agregará a la lista al guardar)</span>`
+    : `<span class="no">✗ Área:</span> no detectada, selecciónala o di "área ..."`);
+
+  // ---- Departamento ----
+  const deptoOpts = optionValues('f-depto');
+  let depto = null, deptoNew = null;
+  if(sec.departamento){
+    depto = findBestOption(norm(sec.departamento), deptoOpts, DEPTO_SYNONYMS);
+    if(!depto){ const name = extractName(sec.departamento, 4, false); if(name) deptoNew = cap(name); }
+  } else {
+    depto = findBestOption(text, deptoOpts, DEPTO_SYNONYMS);
+  }
+  if(depto) setSelectOrNew('f-depto','f-depto-otro', depto, false);
+  else if(deptoNew) setSelectOrNew('f-depto','f-depto-otro', deptoNew, true);
+  out.push(depto ? `<span class="ok">✓ Departamento:</span> ${escapeHtml(depto)}`
+    : deptoNew ? `<span class="ok">✓ Departamento nuevo:</span> ${escapeHtml(deptoNew)} <span style="color:var(--muted)">(se agregará a la lista al guardar)</span>`
+    : `<span class="no">✗ Departamento:</span> no detectado, selecciónalo o di "departamento ..."`);
+
+  // ---- Estado ----
+  const st = detectStatus(norm(sec.estado || transcript));
   if(st){ const b = document.querySelector(`.status-btn[data-val="${st}"]`); if(b) b.click(); }
   out.push(st ? `<span class="ok">✓ Estado:</span> ${statusLabel(st)}` : `<span class="ok">✓ Estado:</span> Pendiente (por defecto)`);
 
-  // Comentario: solo la descripción (sin las partes de departamento/estado ya capturadas)
-  let clean = sec.hasKeys ? [sec.pre, sec.area].filter(Boolean).join(' ').trim() : transcript.trim();
+  // ---- Comentario ----
+  let clean;
+  if(sec.comentario) clean = sec.comentario;
+  else clean = sec.hasKeys ? [sec.pre, sec.area].filter(Boolean).join(' ').trim() : transcript.trim();
   if(!clean) clean = transcript.trim();
-  clean = clean.charAt(0).toUpperCase() + clean.slice(1);
-  if(!/[.!?]$/.test(clean)) clean += '.';
-  if(sec.responsable) clean += ' Responsable: ' + sec.responsable.charAt(0).toUpperCase() + sec.responsable.slice(1) + '.';
-  clean = collapseRepeats(clean.replace(/\.$/, '')) + '.';
+  clean = collapseRepeats(cap(clean).replace(/[.\s]+$/,'')) + '.';
+  if(sec.responsable) clean += ' Responsable: ' + cap(sec.responsable.replace(/[.\s]+$/,'')) + '.';
   const com = document.getElementById('f-comentario');
   const cur = com.value.trim();
-  // No volver a agregar un texto que ya está en el comentario
   if(!cur) com.value = clean;
   else if(!norm(cur).includes(norm(clean))) com.value = cur + ' ' + clean;
   out.push(`<span class="ok">✓ Comentario</span> agregado — revísalo antes de guardar`);
